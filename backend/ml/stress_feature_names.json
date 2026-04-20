@@ -1,0 +1,14 @@
+[
+  "heart_rate_mean",
+  "heart_rate_std",
+  "heart_rate_slope",
+  "hrv_mean",
+  "accel_x_mean",
+  "accel_x_std",
+  "accel_y_mean",
+  "accel_y_std",
+  "activity_mean",
+  "activity_std",
+  "activity_slope",
+  "spo2_mean"
+]
