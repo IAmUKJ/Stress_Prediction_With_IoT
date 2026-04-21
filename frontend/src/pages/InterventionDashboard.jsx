@@ -79,7 +79,7 @@ export default function InterventionDashboard() {
         category,
         sessionId,
         metadata: {
-          heartRate: sensor?.derivedHeartRate ?? sensor?.firebaseHeartRateAvg ?? null,
+          heartRate: sensor?.heartRate ?? null,
           buildupDetected: analytics.summary.buildupDetected,
           recoverySeconds: analytics.summary.recoverySeconds,
         },

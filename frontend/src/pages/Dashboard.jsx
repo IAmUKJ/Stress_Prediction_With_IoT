@@ -48,7 +48,7 @@ export default function Dashboard() {
       <div className='max-w-7xl mx-auto p-4 space-y-4'>
         <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4'>
           <StatCard title='Stress Status' value={stress?.predictedClass || 'Waiting'} icon={ShieldAlert} subtitle={`${Math.round((stress?.confidence || 0)*100)}% confidence`} />
-          <StatCard title='Heart Rate' value={`${Math.round(sensor?.derivedHeartRate || 0)} bpm`} icon={HeartPulse} />
+          <StatCard title='Heart Rate' value={`${Math.round(sensor?.heartRate || 0)} bpm`} icon={HeartPulse} />
           <StatCard title='SpO₂' value={`${sensor?.spo2 || '--'} %`} icon={Droplets} />
           <StatCard title='HRV / Activity' value={`${sensor?.hrv || '--'} / ${sensor?.activity || '--'}`} icon={Activity} />
         </div>
