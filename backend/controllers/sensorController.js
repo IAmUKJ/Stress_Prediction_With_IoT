@@ -5,17 +5,66 @@ const SensorStreamState = require("../models/sensorStreamState");
 let firebaseListenerStarted = false;
 
 const deviceId = process.env.FIREBASE_PATH || "data";
+const MIN_HEART_RATE = 30;
+
+function getByPath(obj, path) {
+  return path.split(".").reduce((acc, key) => (acc == null ? undefined : acc[key]), obj);
+}
+
+function pickFirstNumber(source, paths) {
+  for (const p of paths) {
+    const value = getByPath(source, p);
+    if (value === undefined || value === null) continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function parseFirebasePayload(data) {
+  return {
+    accelX: pickFirstNumber(data, ["accelX", "accel_x", "imu.accelX", "imu.ax"]),
+    accelY: pickFirstNumber(data, ["accelY", "accel_y", "imu.accelY", "imu.ay"]),
+    activity: pickFirstNumber(data, ["activity", "Activity", "imu.activity", "imuActivity"]),
+    hrv: pickFirstNumber(data, ["hrv", "HRV", "heartRateVariability", "imu.hrv"]),
+    spo2: pickFirstNumber(data, ["spo2", "SpO2", "oxygen", "oxygenSaturation"]),
+    heartRateAvg: pickFirstNumber(data, ["heartRate", "hr", "heart_rate", "avgHeartRate"]),
+    firebaseUpdatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),
+  };
+}
+
+async function getLatestLiveSnapshot() {
+  try {
+    const snapshot = await admin.database().ref(deviceId).once("value");
+    if (!snapshot.exists()) return null;
+
+    const data = snapshot.val();
+    const parsed = parseFirebasePayload(data);
+
+    return {
+      activity: parsed.activity,
+      accelX: parsed.accelX,
+      accelY: parsed.accelY,
+      hrv: parsed.hrv,
+      spo2: parsed.spo2,
+      firebaseHeartRateAvg: parsed.heartRateAvg,
+      firebaseUpdatedAt: parsed.firebaseUpdatedAt,
+    };
+  } catch (error) {
+    console.error("Error reading live Firebase snapshot:", error.message);
+    return null;
+  }
+}
 
 async function cleanupInvalidReadings() {
   const result = await SensorReading.deleteMany({
-    $and: [
-      { derivedHeartRate: { $lte: 0 } },
-      { firebaseHeartRateAvg: { $lte: 0 } },
-    ],
+    derivedHeartRate: { $lt: MIN_HEART_RATE },
   });
 
   if (result.deletedCount > 0) {
-    console.log(`Deleted ${result.deletedCount} invalid zero/negative heart rate records`);
+    console.log(
+      `Deleted ${result.deletedCount} invalid heart rate records (< ${MIN_HEART_RATE})`
+    );
   }
 }
 
@@ -33,17 +82,16 @@ async function initFirebaseListener() {
       if (!snapshot.exists()) return;
 
       const data = snapshot.val();
+      const parsed = parseFirebasePayload(data);
 
-      const accelX = data.accelX !== undefined ? Number(data.accelX) : null;
-      const accelY = data.accelY !== undefined ? Number(data.accelY) : null;
-      const activity = data.activity !== undefined ? Number(data.activity) : null;
-      const hrv = data.hrv !== undefined ? Number(data.hrv) : null;
-      const spo2 = data.spo2 !== undefined ? Number(data.spo2) : null;
+      const accelX = parsed.accelX;
+      const accelY = parsed.accelY;
+      const activity = parsed.activity;
+      const hrv = parsed.hrv;
+      const spo2 = parsed.spo2;
 
-      const firebaseHeartRateAvg = Number(data.heartRate ?? 0);
-      const firebaseUpdatedAt = data.updatedAt
-        ? new Date(data.updatedAt)
-        : new Date();
+      const firebaseHeartRateAvg = Number(parsed.heartRateAvg ?? 0);
+      const firebaseUpdatedAt = parsed.firebaseUpdatedAt;
 
       let state = await SensorStreamState.findOne({ deviceId });
 
@@ -72,9 +120,11 @@ async function initFirebaseListener() {
         derivedHeartRate = firebaseHeartRateAvg;
       }
 
-      // Only store when there is valid heart rate data
-      if (derivedHeartRate <= 0 && firebaseHeartRateAvg <= 0) {
-        console.log("Skipping empty Firebase reading: no heart rate data");
+      // Store only when reconstructed/latest heart rate is valid.
+      if (!Number.isFinite(derivedHeartRate) || derivedHeartRate < MIN_HEART_RATE) {
+        console.log(
+          `Skipping Firebase reading: latest heart rate ${derivedHeartRate} is below ${MIN_HEART_RATE}`
+        );
         return;
       }
 
@@ -132,16 +182,58 @@ const startFirebaseListener = async (req, res) => {
 const getLatestReading = async (req, res) => {
   try {
     const latest = await SensorReading.findOne({
-      $or: [
-        { derivedHeartRate: { $gt: 0 } },
-        { firebaseHeartRateAvg: { $gt: 0 } },
-      ],
+      derivedHeartRate: { $gte: MIN_HEART_RATE },
     })
       .sort({ createdAt: -1 });
 
+    const live = await getLatestLiveSnapshot();
+
+    let data = latest ? latest.toObject() : null;
+
+    if (live) {
+      if (!data) {
+        data = {
+          deviceId,
+          accelX: live.accelX,
+          accelY: live.accelY,
+          activity: live.activity,
+          hrv: live.hrv,
+          spo2: live.spo2,
+          firebaseHeartRateAvg: live.firebaseHeartRateAvg,
+          derivedHeartRate: null,
+          firebaseUpdatedAt: live.firebaseUpdatedAt,
+          receivedAt: new Date(),
+          liveOnly: true,
+        };
+      } else {
+        data.activity = live.activity;
+        data.accelX = live.accelX;
+        data.accelY = live.accelY;
+        data.hrv = live.hrv;
+        data.spo2 = live.spo2;
+        data.firebaseHeartRateAvg = live.firebaseHeartRateAvg;
+        data.firebaseUpdatedAt = live.firebaseUpdatedAt;
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      data: latest,
+      data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getLiveReading = async (req, res) => {
+  try {
+    const live = await getLatestLiveSnapshot();
+    return res.status(200).json({
+      success: true,
+      data: live,
     });
   } catch (error) {
     return res.status(500).json({
@@ -157,10 +249,7 @@ const getReadingHistory = async (req, res) => {
     const limit = Number(req.query.limit || 100);
 
     const history = await SensorReading.find({
-      $or: [
-        { derivedHeartRate: { $gt: 0 } },
-        { firebaseHeartRateAvg: { $gt: 0 } },
-      ],
+      derivedHeartRate: { $gte: MIN_HEART_RATE },
     })
       .sort({ createdAt: -1 })
       .limit(limit);
@@ -181,6 +270,7 @@ const getReadingHistory = async (req, res) => {
 module.exports = {
   initFirebaseListener,
   startFirebaseListener,
+  getLiveReading,
   getLatestReading,
   getReadingHistory,
 };

@@ -8,8 +8,8 @@ export default function SensorTable({ data }) {
   return (
     <Card className={`rounded-2xl border-0 transition-all ${
       isDark
-        ? 'bg-gradient-to-br from-slate-900/90 to-slate-950/95 border border-orange-500/40'
-        : 'bg-gradient-to-br from-orange-50 to-white border border-orange-200'
+        ? 'bg-linear-to-br from-slate-900/90 to-slate-950/95 border border-orange-500/40'
+        : 'bg-linear-to-br from-orange-50 to-white border border-orange-200'
     }`}>
       <CardContent className='p-5'>
         <h2 className={`font-semibold mb-4 text-lg ${isDark ? 'text-white' : 'text-slate-900'}`}>
