@@ -5,13 +5,13 @@ import { useTheme } from '@/context/ThemeContext';
 
 export default function HeartRateChart({ data }) {
   const { isDark } = useTheme();
-  const chart = data.map((r, i) => ({ idx: i+1, hr: r.derivedHeartRate, avg: r.firebaseHeartRateAvg }));
+  const chart = data.map((r, i) => ({ idx: i+1, hr: r.heartRate }));
 
   return (
     <Card className={`rounded-2xl border-0 transition-all ${
       isDark
-        ? 'bg-gradient-to-br from-slate-900/90 to-slate-950/95 border border-orange-500/40'
-        : 'bg-gradient-to-br from-orange-50 to-white border border-orange-200'
+        ? 'bg-linear-to-br from-slate-900/90 to-slate-950/95 border border-orange-500/40'
+        : 'bg-linear-to-br from-orange-50 to-white border border-orange-200'
     }`}>
       <CardContent className='p-5'>
         <h2 className={`font-semibold mb-4 text-lg ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -32,7 +32,6 @@ export default function HeartRateChart({ data }) {
                 labelStyle={{ color: isDark ? '#ffffff' : '#000000' }}
               />
               <Line dataKey='hr' strokeWidth={3} dot={false} stroke='#f97316' />
-              <Line dataKey='avg' strokeWidth={2} dot={false} stroke='#fb923c' strokeOpacity={0.7} />
             </LineChart>
           </ResponsiveContainer>
         </div>

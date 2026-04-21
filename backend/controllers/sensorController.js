@@ -1,6 +1,5 @@
 const admin = require("../config/firebase");
 const SensorReading = require("../models/sensorReading");
-const SensorStreamState = require("../models/sensorStreamState");
 
 let firebaseListenerStarted = false;
 
@@ -28,7 +27,7 @@ function parseFirebasePayload(data) {
     activity: pickFirstNumber(data, ["activity", "Activity", "imu.activity", "imuActivity"]),
     hrv: pickFirstNumber(data, ["hrv", "HRV", "heartRateVariability", "imu.hrv"]),
     spo2: pickFirstNumber(data, ["spo2", "SpO2", "oxygen", "oxygenSaturation"]),
-    heartRateAvg: pickFirstNumber(data, ["heartRate", "hr", "heart_rate", "avgHeartRate"]),
+    heartRate: pickFirstNumber(data, ["heartRate", "hr", "heart_rate", "avgHeartRate"]),
     firebaseUpdatedAt: data.updatedAt ? new Date(data.updatedAt) : new Date(),
   };
 }
@@ -47,7 +46,7 @@ async function getLatestLiveSnapshot() {
       accelY: parsed.accelY,
       hrv: parsed.hrv,
       spo2: parsed.spo2,
-      firebaseHeartRateAvg: parsed.heartRateAvg,
+      heartRate: parsed.heartRate,
       firebaseUpdatedAt: parsed.firebaseUpdatedAt,
     };
   } catch (error) {
@@ -58,7 +57,7 @@ async function getLatestLiveSnapshot() {
 
 async function cleanupInvalidReadings() {
   const result = await SensorReading.deleteMany({
-    derivedHeartRate: { $lt: MIN_HEART_RATE },
+    heartRate: { $lt: MIN_HEART_RATE },
   });
 
   if (result.deletedCount > 0) {
@@ -90,40 +89,13 @@ async function initFirebaseListener() {
       const hrv = parsed.hrv;
       const spo2 = parsed.spo2;
 
-      const firebaseHeartRateAvg = Number(parsed.heartRateAvg ?? 0);
+      const heartRate = Number(parsed.heartRate ?? 0);
       const firebaseUpdatedAt = parsed.firebaseUpdatedAt;
 
-      let state = await SensorStreamState.findOne({ deviceId });
-
-      if (!state) {
-        state = await SensorStreamState.create({
-          deviceId,
-          sampleIndex: 0,
-          lastAvgHeartRate: null,
-          lastFirebaseUpdatedAt: null,
-        });
-      }
-
-      let derivedHeartRate = firebaseHeartRateAvg;
-
-      if (state.sampleIndex >= 1 && state.lastAvgHeartRate !== null) {
-        const newCount = state.sampleIndex + 1;
-        const oldCount = state.sampleIndex;
-
-        // reconstructed raw/interval heart rate
-        derivedHeartRate =
-          newCount * firebaseHeartRateAvg - oldCount * state.lastAvgHeartRate;
-      }
-
-      // prevent weird negative values if data is noisy
-      if (!Number.isFinite(derivedHeartRate)) {
-        derivedHeartRate = firebaseHeartRateAvg;
-      }
-
-      // Store only when reconstructed/latest heart rate is valid.
-      if (!Number.isFinite(derivedHeartRate) || derivedHeartRate < MIN_HEART_RATE) {
+      // Store only when direct/latest heart rate is valid.
+      if (!Number.isFinite(heartRate) || heartRate < MIN_HEART_RATE) {
         console.log(
-          `Skipping Firebase reading: latest heart rate ${derivedHeartRate} is below ${MIN_HEART_RATE}`
+          `Skipping Firebase reading: heart rate ${heartRate} is below ${MIN_HEART_RATE}`
         );
         return;
       }
@@ -135,20 +107,13 @@ async function initFirebaseListener() {
         activity,
         hrv,
         spo2,
-        firebaseHeartRateAvg,
-        derivedHeartRate,
+        heartRate,
         firebaseUpdatedAt,
         receivedAt: new Date(),
       });
 
-      state.sampleIndex += 1;
-      state.lastAvgHeartRate = firebaseHeartRateAvg;
-      state.lastFirebaseUpdatedAt = firebaseUpdatedAt;
-      await state.save();
-
       console.log("Stored reading:", {
-        firebaseHeartRateAvg,
-        derivedHeartRate,
+        heartRate,
       });
     } catch (err) {
       console.error("Error saving Firebase reading:", err.message);
@@ -182,7 +147,7 @@ const startFirebaseListener = async (req, res) => {
 const getLatestReading = async (req, res) => {
   try {
     const latest = await SensorReading.findOne({
-      derivedHeartRate: { $gte: MIN_HEART_RATE },
+      heartRate: { $gte: MIN_HEART_RATE },
     })
       .sort({ createdAt: -1 });
 
@@ -199,8 +164,7 @@ const getLatestReading = async (req, res) => {
           activity: live.activity,
           hrv: live.hrv,
           spo2: live.spo2,
-          firebaseHeartRateAvg: live.firebaseHeartRateAvg,
-          derivedHeartRate: null,
+          heartRate: live.heartRate,
           firebaseUpdatedAt: live.firebaseUpdatedAt,
           receivedAt: new Date(),
           liveOnly: true,
@@ -211,7 +175,7 @@ const getLatestReading = async (req, res) => {
         data.accelY = live.accelY;
         data.hrv = live.hrv;
         data.spo2 = live.spo2;
-        data.firebaseHeartRateAvg = live.firebaseHeartRateAvg;
+        data.heartRate = live.heartRate;
         data.firebaseUpdatedAt = live.firebaseUpdatedAt;
       }
     }
@@ -249,7 +213,7 @@ const getReadingHistory = async (req, res) => {
     const limit = Number(req.query.limit || 100);
 
     const history = await SensorReading.find({
-      derivedHeartRate: { $gte: MIN_HEART_RATE },
+      heartRate: { $gte: MIN_HEART_RATE },
     })
       .sort({ createdAt: -1 })
       .limit(limit);

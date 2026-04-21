@@ -21,7 +21,6 @@ export default function SensorTable({ data }) {
               <tr className={`text-left ${isDark ? 'text-orange-400/70' : 'text-orange-700'}`}>
                 <th className='py-2'>#</th>
                 <th>HR</th>
-                <th>Avg</th>
                 <th>HRV</th>
                 <th>SpO₂</th>
                 <th>Activity</th>
@@ -41,10 +40,7 @@ export default function SensorTable({ data }) {
                     {i+1}
                   </td>
                   <td className={isDark ? 'text-slate-200' : 'text-slate-700'}>
-                    {Math.round(r.derivedHeartRate)}
-                  </td>
-                  <td className={isDark ? 'text-slate-200' : 'text-slate-700'}>
-                    {r.firebaseHeartRateAvg}
+                    {Math.round(r.heartRate)}
                   </td>
                   <td className={isDark ? 'text-slate-200' : 'text-slate-700'}>
                     {r.hrv}

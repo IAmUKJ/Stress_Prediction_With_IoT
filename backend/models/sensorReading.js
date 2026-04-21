@@ -28,14 +28,8 @@ const sensorReadingSchema = new mongoose.Schema(
       default: null,
     },
 
-    // what Firebase sends
-    firebaseHeartRateAvg: {
-      type: Number,
-      required: true,
-    },
-
-    // what we reconstruct/store in Mongo for trend
-    derivedHeartRate: {
+    // direct heart-rate reading from device payload window
+    heartRate: {
       type: Number,
       required: true,
     },
