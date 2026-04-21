@@ -158,7 +158,7 @@ export default function InterventionLogs({ sessionId, deviceId }) {
 
       {/* Gemini Recommendations */}
       {recommendations && (
-        <Card className='rounded-lg bg-gradient-to-r from-purple-900 to-indigo-900 border-purple-700 p-6'>
+        <Card className='rounded-lg bg-linear-to-r from-purple-900 to-indigo-900 border-purple-700 p-6'>
           <div className='flex items-start gap-3 mb-4'>
             <Lightbulb className='text-yellow-400' size={24} />
             <div>

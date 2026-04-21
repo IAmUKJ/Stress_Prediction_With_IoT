@@ -11,9 +11,9 @@ function Ring({ value }) {
   const deg = (value / 100) * 180;
   return (
     <div className='relative w-56 h-32 overflow-hidden'>
-      <div className='absolute inset-0 rounded-t-full border-[18px] border-white/10 border-b-0'></div>
+      <div className='absolute inset-0 rounded-t-full border-18 border-white/10 border-b-0'></div>
       <div
-        className='absolute inset-0 rounded-t-full border-[18px] border-emerald-400 border-b-0'
+        className='absolute inset-0 rounded-t-full border-18 border-emerald-400 border-b-0'
         style={{ clipPath: `inset(0 ${100 - deg / 1.8}% 0 0)` }}
       ></div>
       <div className='absolute bottom-0 left-1/2 -translate-x-1/2 text-4xl font-bold'>
@@ -37,7 +37,7 @@ export default function InterventionDashboard() {
     try {
       const [a, s, p] = await Promise.all([
         axios.get(`${API}/analytics`).catch(() => ({ data: { summary: {}, series: [] } })),
-        axios.get(`${API}/sensors/latest`).catch(() => ({ data: { data: null } })),
+        axios.get(`${API}/sensors/live`).catch(() => ({ data: { data: null } })),
         axios.get(`${API}/stress/predict`).catch(() => ({ data: { data: null } })),
       ]);
       setAnalytics(a.data);
@@ -79,7 +79,7 @@ export default function InterventionDashboard() {
         category,
         sessionId,
         metadata: {
-          heartRate: sensor?.heartRate,
+          heartRate: sensor?.derivedHeartRate ?? sensor?.firebaseHeartRateAvg ?? null,
           buildupDetected: analytics.summary.buildupDetected,
           recoverySeconds: analytics.summary.recoverySeconds,
         },
@@ -94,7 +94,9 @@ export default function InterventionDashboard() {
     const act = Number(sensor?.activity || 0);
     const buildup = analytics?.summary?.buildupDetected;
 
-    if (score > 75 && act < 0.2)
+    if (act > 0.2)
+      setTip('High IMU movement detected. Ignoring stress triggers while activity is high.');
+    else if (score > 75 && act < 0.2)
       setTip("You've been stressed for a while — try box breathing for 60 seconds.");
     else if (score > 70 && act < 0.2)
       setTip('Stand up and walk for 2 minutes.');
